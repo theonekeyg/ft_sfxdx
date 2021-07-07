@@ -1,0 +1,4 @@
+contract.wasm*
+tags
+*.o
+target/
