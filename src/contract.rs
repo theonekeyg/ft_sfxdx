@@ -1,14 +1,15 @@
 use cosmwasm_std::{
     Extern, Env, Storage, Api, Querier, StdResult, StdError, Uint128,
-    InitResponse, HandleResponse, QueryResponse, Binary, to_binary,
-    HumanAddr};
+    InitResponse, HandleResponse, Binary, to_binary,
+    HumanAddr
+};
 
 use crate::msg::{InitMsg, HandleMsg, QueryMsg};
 use crate::state::{Balances, ReadonlyBalances};
 
 pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
-    env: Env,
+    _env: Env,
     msg: InitMsg
 ) -> StdResult<InitResponse> {
     let mut balances_storage = Balances::from_storage(&mut deps.storage);
@@ -33,7 +34,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             return handle_transfer(deps, env, &to, amount),
         HandleMsg::Burn { amount } => return handle_burn(deps, env, amount),
     }
-    Ok(HandleResponse::default())
 }
 
 pub fn handle_transfer<S: Storage, A: Api, Q: Querier>(
@@ -82,7 +82,6 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
     match msg {
         QueryMsg::Balance { address } => return query_balance(deps, &address),
     }
-    Ok(QueryResponse::default())
 }
 
 pub fn query_balance<S: Storage, A: Api, Q: Querier>(
@@ -94,4 +93,97 @@ pub fn query_balance<S: Storage, A: Api, Q: Querier>(
         return Ok(to_binary(&Uint128::from(owner_balance))?);
     }
     Err(StdError::not_found("Requested address wasn't found in global chain"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::msg::InitBalance;
+    use cosmwasm_std::testing::*;
+    use cosmwasm_std::{ CanonicalAddr };
+
+    /// Helper function for init routines
+    fn init_helper(balances: Option<Vec<InitBalance>>) -> (
+        StdResult<InitResponse>,
+        Extern<MockStorage, MockApi, MockQuerier>
+    ) {
+        let mut deps = mock_dependencies(20, &[]);
+        let env = mock_env("instantiator", &[]);
+        let init_msg = InitMsg { balances: balances };
+        (init(&mut deps, env, init_msg), deps)
+    }
+
+    #[test]
+    fn test_init() {
+        let (init_res, _deps) = init_helper(None);
+        assert_eq!(init_res.unwrap(), InitResponse::default());
+    }
+
+    #[test]
+    fn test_init_with_balances() {
+        let (init_res, deps) = init_helper(Some(vec![
+            InitBalance { address: HumanAddr("testme".into()),
+                          amount: Uint128::from(500u128) }
+        ]));
+        assert_eq!(init_res.unwrap(), InitResponse::default());
+        let balances = ReadonlyBalances::from_storage(&deps.storage);
+        // Somehow these two lines below don't produce the same result, the first one
+        // is failing the test.
+        // let addr = CanonicalAddr::from(b"testme" as &[u8]);
+        let addr = deps.api.canonical_address(&HumanAddr("testme".into())).unwrap();
+        assert_eq!(500, balances.get(&addr).unwrap_or_default());
+    }
+
+    #[test]
+    fn test_transfer() {
+        let (init_res, mut deps) = init_helper(Some(vec![
+            InitBalance { address: HumanAddr("sender".into()),
+                          amount: Uint128::from(500u128) },
+            InitBalance { address: HumanAddr("receiver".into()),
+                          amount: Uint128::from(100u128) }
+        ]));
+        assert_eq!(init_res.unwrap(), InitResponse::default());
+        let env = mock_env("sender", &[]);
+        let msg = HandleMsg::Transfer {
+            to: HumanAddr("receiver".into()), amount: Uint128::from(150u128)
+        };
+        let handle_res = handle(&mut deps, env, msg);
+        assert_eq!(handle_res.unwrap(), HandleResponse::default());
+
+        let balances = ReadonlyBalances::from_storage(&deps.storage);
+        let send_addr = deps.api.canonical_address(&HumanAddr("sender".into())).unwrap();
+        let recv_addr = deps.api.canonical_address(&HumanAddr("receiver".into())).unwrap();
+        assert_eq!(balances.get(&send_addr).unwrap_or_default(), 350);
+        assert_eq!(balances.get(&recv_addr).unwrap_or_default(), 250);
+    }
+
+    #[test]
+    fn test_burn() {
+        let (init_res, mut deps) = init_helper(Some(vec![
+            InitBalance { address: HumanAddr("burner".into()),
+                          amount: Uint128::from(1000u128) },
+        ]));
+        assert_eq!(init_res.unwrap(), InitResponse::default());
+        let env = mock_env("burner", &[]);
+        let msg = HandleMsg::Burn { amount: Uint128::from(350u128) };
+        let handle_res = handle(&mut deps, env, msg);
+        assert_eq!(handle_res.unwrap(), HandleResponse::default());
+
+        let balances = ReadonlyBalances::from_storage(&deps.storage);
+        let addr = deps.api.canonical_address(&HumanAddr("burner".into())).unwrap();
+        assert_eq!(balances.get(&addr).unwrap_or_default(), 650);
+   }
+
+    #[test]
+    fn test_burn_overflow() {
+        let (init_res, mut deps) = init_helper(Some(vec![
+            InitBalance { address: HumanAddr("burner".into()),
+                          amount: Uint128::from(250u128) },
+        ]));
+        assert_eq!(init_res.unwrap(), InitResponse::default());
+        let env = mock_env("burner", &[]);
+        let msg = HandleMsg::Burn { amount: Uint128::from(500u128) };
+        let handle_res = handle(&mut deps, env, msg);
+        assert_eq!(handle_res.err(), Some(StdError::generic_err("overflow occurred")));
+    }
 }

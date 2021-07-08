@@ -1,8 +1,6 @@
 use std::convert::TryFrom;
-use serde::{Serialize, Deserialize};
-use schemars::JsonSchema;
 
-use cosmwasm_std::{CanonicalAddr, HumanAddr, Storage, ReadonlyStorage};
+use cosmwasm_std::{CanonicalAddr, Storage, ReadonlyStorage};
 use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage};
 // use cosmwasm_storage::prefixed_storage::{PrefixedStorage, ReadonlyPrefixedStorage};
 

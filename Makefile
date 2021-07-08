@@ -16,6 +16,9 @@ else
 	cp ./target/wasm32-unknown-unknown/release/*.wasm ./contract.wasm
 endif
 
+test:
+	cargo test
+
 distclean:
 	rm -rf ./contract.wasm ./contract.wasm.gz
 
