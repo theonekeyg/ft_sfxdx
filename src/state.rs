@@ -2,7 +2,6 @@ use std::convert::TryFrom;
 
 use cosmwasm_std::{CanonicalAddr, Storage, ReadonlyStorage};
 use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage};
-// use cosmwasm_storage::prefixed_storage::{PrefixedStorage, ReadonlyPrefixedStorage};
 
 pub const STORAGE_PREFIX: &[u8] = b"prefixed_storage";
 
